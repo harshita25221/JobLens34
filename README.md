@@ -50,6 +50,7 @@ Before deployment, ensure you have all required tools installed. See `DEPLOYMENT
 - `HEROKU_WEB_DEPLOYMENT.md`: Heroku web interface deployment
 - `NETLIFY_WEB_DEPLOYMENT.md`: Netlify web interface deployment
 - `RAILWAY_DEPLOYMENT.md`: Railway unified deployment
+- `RENDER_DEPLOYMENT.md`: Render unified deployment
 
 ## Environment Variables
 

@@ -104,3 +104,4 @@ If you encounter issues during deployment:
 For more detailed troubleshooting, refer to the deployment guide for your chosen platform:
 - `COMBINED_DEPLOYMENT_GUIDE.md` for Heroku/Netlify/Vercel
 - `RAILWAY_DEPLOYMENT.md` for Railway
+- `RENDER_DEPLOYMENT.md` for Render
