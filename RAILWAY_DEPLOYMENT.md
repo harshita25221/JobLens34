@@ -121,6 +121,16 @@ If you're using a custom domain and need to proxy API requests:
 - Check CORS configuration in your backend code
 - Verify the API proxy configuration if using custom domains
 
+### Healthcheck Failures
+
+If you encounter healthcheck failures during deployment:
+
+1. Ensure your backend has a route defined for the healthcheck path (default is "/").
+2. For Flask applications, make sure the route returns a valid response (e.g., JSON response with status).
+3. For frontend applications, set the healthcheck path to "/index.html" in your railway.json.
+4. Check Railway logs for specific healthcheck error messages.
+5. Consider increasing the healthcheck timeout if your application takes longer to start.
+
 ## Monitoring and Scaling
 
 1. **View Logs**

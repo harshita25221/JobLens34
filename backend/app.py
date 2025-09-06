@@ -184,7 +184,7 @@ def generate_suggestions(resume_text, job_description, cosine_sim, missing_skill
 
 @app.route("/")
 def index():  
-    return render_template("index.html")
+    return jsonify({"status": "healthy", "message": "JobLens API is running"})
 
 @app.route("/analyze", methods=["POST"])  
 def analyze():  
