@@ -113,6 +113,7 @@ If you're using a custom domain and need to proxy API requests:
 - Check the deployment logs in the Railway dashboard
 - Verify your build and start commands are correct
 - Ensure all dependencies are properly listed in `package.json`
+- If you encounter "Error creating build plan with Railpack", ensure you have proper `railway.json` configuration files in your project root, backend, and frontend directories. These files help Railway understand how to build and deploy your application.
 
 ### API Connection Issues
 
