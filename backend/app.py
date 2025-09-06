@@ -1,5 +1,4 @@
 import docx
-import spacy 
 import pdfplumber
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -7,7 +6,6 @@ import re
 from keybert import KeyBERT
 from io import BytesIO
 from flask import Flask, request, jsonify, render_template
-from spacy.lang.en.stop_words import STOP_WORDS
 import pandas as pd
 from flask_cors import CORS
 from rapidfuzz import process, fuzz
@@ -18,18 +16,13 @@ app = Flask(__name__)
 CORS(app)
 
 # Lazy loading of NLP models
-nlp = None
 kw_model = None
 
 # Thread-local storage for models
 thread_local = threading.local()
 
-# Function to get NLP model when needed
-def get_nlp():
-    global nlp
-    if nlp is None:
-        nlp = spacy.load("en_core_web_sm")
-    return nlp
+# Define basic stop words as fallback
+STOP_WORDS = {'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 'to', 'was', 'will', 'with'}
 
 # Function to get KeyBERT model when needed
 def get_keybert():
@@ -128,35 +121,34 @@ def get_keywords(text, num_keywords=20):
     gc.collect()
     return result
 
-def extract_spacy_skills(text):
-    model = get_nlp()
-    # Process text in smaller chunks if it's large
-    if len(text) > 10000:
-        chunks = [text[i:i+10000] for i in range(0, len(text), 10000)]
-        skills = set()
-        for chunk in chunks:
-            doc = model(chunk)
-            for token in doc:
-                if token.pos_ in ['NOUN', 'PROPN'] and len(token.text) > 2:
-                    word = token.text.strip()
-                    if word.lower() not in STOP_WORDS:
-                        if word[0].isupper() or re.search(r"[A-Za-z0-9\+\#]", word):
-                            skills.add(word)
-            for ent in doc.ents:
-                if ent.label_ in ['ORG', 'PRODUCT', 'LANGUAGE']:
-                    skills.add(ent.text.lower())
-    else:
-        doc = model(text)
-        skills = set()
-        for token in doc:
-            if token.pos_ in ['NOUN', 'PROPN'] and len(token.text) > 2:
-                word = token.text.strip()
-                if word.lower() not in STOP_WORDS:
-                    if word[0].isupper() or re.search(r"[A-Za-z0-9\+\#]", word):
-                        skills.add(word)
-        for ent in doc.ents:
-            if ent.label_ in ['ORG', 'PRODUCT', 'LANGUAGE']:
-                skills.add(ent.text.lower())
+def extract_simple_skills(text):
+    """
+    Simple skill extraction without spaCy - using regex patterns
+    """
+    skills = set()
+    
+    # Split text into words and filter for potential skills
+    words = re.findall(r'\b[A-Za-z][A-Za-z0-9\+\#]*\b', text)
+    
+    for word in words:
+        word = word.strip()
+        if len(word) > 2 and word.lower() not in STOP_WORDS:
+            # Add words that start with capital or contain special chars
+            if word[0].isupper() or re.search(r"[0-9\+\#]", word):
+                skills.add(word)
+    
+    # Look for common technical terms and skills patterns
+    tech_patterns = [
+        r'\b[A-Z]{2,}\b',  # Acronyms like SQL, API, etc.
+        r'\b[A-Za-z]+\.[A-Za-z]+\b',  # Tech terms like Node.js
+        r'\b[A-Za-z]+-[A-Za-z]+\b',  # Hyphenated terms
+    ]
+    
+    for pattern in tech_patterns:
+        matches = re.findall(pattern, text)
+        for match in matches:
+            if len(match) > 2 and match.lower() not in STOP_WORDS:
+                skills.add(match)
     
     # Force garbage collection after processing
     gc.collect()
@@ -202,7 +194,7 @@ def get_combined_skills(text):
     kw_skills = set(get_keywords(text))
     gc.collect()  # Force garbage collection between stages
     
-    spacy_skills = set(extract_spacy_skills(text))
+    simple_skills = set(extract_simple_skills(text))
     gc.collect()  # Force garbage collection between stages
     
     multiword_skills = extract_multiword_skills(text, global_skills)
@@ -210,12 +202,12 @@ def get_combined_skills(text):
 
     # Process in smaller steps
     all_extracted = {s.lower().strip() for s in kw_skills}
-    all_extracted.update({s.lower().strip() for s in spacy_skills})
+    all_extracted.update({s.lower().strip() for s in simple_skills})
     all_extracted.update({s.lower().strip() for s in multiword_skills})
     
     # Clear intermediate results to free memory
     kw_skills = None
-    spacy_skills = None
+    simple_skills = None
     multiword_skills = None
     gc.collect()
 
