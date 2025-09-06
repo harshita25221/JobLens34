@@ -63,9 +63,16 @@ services:
   - type: web
     name: joblens-backend
     env: python
+    plan: standard
     buildCommand: ./backend/build.sh
-    startCommand: cd backend && gunicorn app:app
+    startCommand: cd backend && gunicorn app:app --workers=1 --threads=2 --timeout=120
     envVars:
+      - key: WEB_CONCURRENCY
+        value: 1
+      - key: MALLOC_ARENA_MAX
+        value: 2
+      - key: PYTHONHASHSEED
+        value: random
       - key: PYTHON_VERSION
         value: 3.10.0
       - key: OPENAI_API_KEY
@@ -88,9 +95,19 @@ The backend service uses a build script (`build.sh`) to set up the Python enviro
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
+
+# Set memory optimization environment variables
+export MALLOC_ARENA_MAX=2
+export PYTHONHASHSEED=random
+
+# Create .profile.d directory for Render environment variables persistence
+mkdir -p .profile.d
+echo 'export MALLOC_ARENA_MAX=2' > .profile.d/memory_optimization.sh
+echo 'export PYTHONHASHSEED=random' >> .profile.d/memory_optimization.sh
+chmod +x .profile.d/memory_optimization.sh
 ```
 
-This script ensures all required dependencies are installed, including the spaCy language model needed for text processing.
+This script ensures all required dependencies are installed, including the spaCy language model needed for text processing. It also sets memory optimization environment variables to help prevent "Out of memory" errors.
 
 ## Verify Deployment
 
@@ -107,6 +124,11 @@ This script ensures all required dependencies are installed, including the spaCy
 - Check the deployment logs in your Render dashboard
 - Verify environment variables are set correctly
 - Ensure all dependencies are listed in `requirements.txt`
+- **Issue**: "Out of memory" errors
+  - **Solution**: The application has been configured to use the Standard plan with optimized Gunicorn settings (--workers=1 --threads=2) to reduce memory usage. If you still encounter memory issues, consider:
+    - Upgrading to a higher plan with more resources
+    - Further optimizing memory-intensive operations in the code
+    - Adding memory monitoring to identify specific bottlenecks
 
 ### Frontend Issues
 

@@ -2,9 +2,16 @@ services:
   - type: web
     name: joblens-backend
     env: python
+    plan: standard
     buildCommand: ./backend/build.sh
-    startCommand: cd backend && gunicorn app:app
+    startCommand: cd backend && gunicorn app:app --workers=1 --threads=2 --timeout=120
     envVars:
+      - key: WEB_CONCURRENCY
+        value: 1
+      - key: MALLOC_ARENA_MAX
+        value: 2
+      - key: PYTHONHASHSEED
+        value: random
       - key: PYTHON_VERSION
         value: 3.10.0
       - key: OPENAI_API_KEY
