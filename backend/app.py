@@ -1,13 +1,8 @@
 import docx
-import spacy 
 import pdfplumber
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 import re
-from keybert import KeyBERT
 from io import BytesIO
 from flask import Flask, request, jsonify, render_template
-from spacy.lang.en.stop_words import STOP_WORDS
 import pandas as pd
 from flask_cors import CORS
 from rapidfuzz import process, fuzz
@@ -17,26 +12,16 @@ import threading
 app = Flask(__name__)
 CORS(app)
 
-# Lazy loading of NLP models
-nlp = None
-kw_model = None
-
-# Thread-local storage for models
-thread_local = threading.local()
-
-# Function to get NLP model when needed
-def get_nlp():
-    global nlp
-    if nlp is None:
-        nlp = spacy.load("en_core_web_sm")
-    return nlp
-
-# Function to get KeyBERT model when needed
-def get_keybert():
-    global kw_model
-    if kw_model is None:
-        kw_model = KeyBERT()
-    return kw_model
+# Simple stop words list (subset of common English stop words)
+STOP_WORDS = {
+    'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'has', 'he', 
+    'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 'to', 'was', 'will', 'with',
+    'i', 'you', 'we', 'they', 'this', 'these', 'those', 'or', 'but', 'if', 'when',
+    'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most',
+    'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so',
+    'than', 'too', 'very', 'can', 'could', 'should', 'would', 'may', 'might',
+    'must', 'shall', 'do', 'does', 'did', 'have', 'had', 'having', 'being'
+}
 
 import openai
 import os
@@ -117,49 +102,44 @@ def clean_text(text):
 
 
 def get_keywords(text, num_keywords=20):
-    model = get_keybert()
-    keywords = model.extract_keywords(
-        text, keyphrase_ngram_range=(1, 3), 
-        stop_words='english',
-        top_n=num_keywords
-    )
-    result = [kw[0] for kw in keywords]
-    # Force garbage collection after processing
-    gc.collect()
-    return result
+    # Simple keyword extraction using word frequency
+    words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
+    word_freq = {}
+    for word in words:
+        if word not in STOP_WORDS:
+            word_freq[word] = word_freq.get(word, 0) + 1
+    
+    # Sort by frequency and return top keywords
+    sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
+    return [word for word, freq in sorted_words[:num_keywords]]
 
 def extract_spacy_skills(text):
-    model = get_nlp()
-    # Process text in smaller chunks if it's large
-    if len(text) > 10000:
-        chunks = [text[i:i+10000] for i in range(0, len(text), 10000)]
-        skills = set()
-        for chunk in chunks:
-            doc = model(chunk)
-            for token in doc:
-                if token.pos_ in ['NOUN', 'PROPN'] and len(token.text) > 2:
-                    word = token.text.strip()
-                    if word.lower() not in STOP_WORDS:
-                        if word[0].isupper() or re.search(r"[A-Za-z0-9\+\#]", word):
-                            skills.add(word)
-            for ent in doc.ents:
-                if ent.label_ in ['ORG', 'PRODUCT', 'LANGUAGE']:
-                    skills.add(ent.text.lower())
-    else:
-        doc = model(text)
-        skills = set()
-        for token in doc:
-            if token.pos_ in ['NOUN', 'PROPN'] and len(token.text) > 2:
-                word = token.text.strip()
-                if word.lower() not in STOP_WORDS:
-                    if word[0].isupper() or re.search(r"[A-Za-z0-9\+\#]", word):
-                        skills.add(word)
-        for ent in doc.ents:
-            if ent.label_ in ['ORG', 'PRODUCT', 'LANGUAGE']:
-                skills.add(ent.text.lower())
+    # Simple skill extraction using pattern matching
+    skills = set()
     
-    # Force garbage collection after processing
-    gc.collect()
+    # Extract capitalized words (potential proper nouns/skills)
+    capitalized_words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+    for word in capitalized_words:
+        if len(word) > 2 and word.lower() not in STOP_WORDS:
+            skills.add(word.lower())
+    
+    # Extract words with special characters (like C++, .NET, etc.)
+    special_words = re.findall(r'\b[a-zA-Z]+[+#\.\-][a-zA-Z0-9]*\b', text)
+    for word in special_words:
+        if len(word) > 2:
+            skills.add(word.lower())
+    
+    # Extract common technical terms
+    tech_patterns = [
+        r'\b(?:python|java|javascript|react|angular|vue|node|sql|mysql|postgresql|mongodb|redis|docker|kubernetes|aws|azure|gcp|linux|windows|macos|git|github|gitlab|jenkins|ci/cd|agile|scrum|api|rest|graphql|microservices|machine learning|ai|artificial intelligence|data science|analytics|blockchain|devops|frontend|backend|fullstack|mobile|ios|android|flutter|react native)\b',
+        r'\b(?:html|css|bootstrap|tailwind|sass|less|typescript|php|ruby|go|rust|swift|kotlin|scala|r|matlab|tensorflow|pytorch|pandas|numpy|scikit|jupyter|tableau|power bi|excel|word|powerpoint|photoshop|illustrator|figma|sketch|invision|zeplin)\b'
+    ]
+    
+    for pattern in tech_patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        for match in matches:
+            skills.add(match.lower())
+    
     return list(skills)
 
 def normalize_skills_with_fuzzy(extracted_skills, global_skills, threshold=85):
@@ -273,25 +253,19 @@ def get_skills_and_score(resume_text, job_description, alpha=0.3):
     overlap_skills = resume_skills.intersection(job_req_skills)
     overlap = len(overlap_skills) / len(job_req_skills) if job_req_skills else 0
 
-    # Use smaller text representations for vectorization
-    resume_text_for_vec = " ".join(list(resume_skills)[:500])  # Limit to 500 skills max
-    job_text_for_vec = " ".join(list(job_req_skills)[:500])  # Limit to 500 skills max
-    
-    # Vectorize with memory optimization
-    vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
+    # Simple text similarity using Jaccard similarity
     try:
-        tfidf_matrix = vectorizer.fit_transform([resume_text_for_vec, job_text_for_vec])
-        cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+        # Convert sets to lists for similarity calculation
+        resume_skills_list = list(resume_skills)
+        job_skills_list = list(job_req_skills)
+        
+        # Calculate Jaccard similarity as a simple alternative to TF-IDF
+        union_size = len(resume_skills.union(job_req_skills))
+        intersection_size = len(overlap_skills)
+        cosine_sim = intersection_size / union_size if union_size > 0 else 0
     except Exception:
-        # Fallback if vectorization fails due to memory
+        # Fallback if calculation fails
         cosine_sim = overlap  # Use overlap as approximation
-    
-    # Free memory
-    vectorizer = None
-    tfidf_matrix = None
-    resume_text_for_vec = None
-    job_text_for_vec = None
-    gc.collect()
 
     final_score = (alpha * cosine_sim + (1 - alpha) * overlap) * 100
 
