@@ -410,6 +410,10 @@ def generate_suggestions(resume_text, job_description, cosine_sim, missing_skill
 def index():  
     return jsonify({"status": "healthy", "message": "JobLens API is running"})
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "healthy", "message": "JobLens API is running"})
+
 @app.route("/analyze", methods=["POST"])  
 def analyze():  
     try:
