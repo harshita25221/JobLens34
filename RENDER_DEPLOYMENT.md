@@ -54,6 +54,44 @@ This guide provides instructions for deploying both the frontend and backend com
    - Click "Create Static Site"
    - Wait for the deployment to complete
 
+## Configuration
+
+This project uses a `render.yaml` file for deployment configuration. The file defines both the frontend and backend services:
+
+```yaml
+services:
+  - type: web
+    name: joblens-backend
+    env: python
+    buildCommand: ./backend/build.sh
+    startCommand: cd backend && gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: web
+    name: joblens-frontend
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://joblens-backend.onrender.com
+```
+
+The backend service uses a build script (`build.sh`) to set up the Python environment and dependencies:
+
+```bash
+#!/bin/bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+```
+
+This script ensures all required dependencies are installed, including the spaCy language model needed for text processing.
+
 ## Verify Deployment
 
 1. Visit your frontend URL to ensure the site loads correctly

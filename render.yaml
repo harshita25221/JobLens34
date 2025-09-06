@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: joblens-backend
+    env: python
+    buildCommand: ./backend/build.sh
+    startCommand: cd backend && gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: web
+    name: joblens-frontend
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://joblens-backend.onrender.com
